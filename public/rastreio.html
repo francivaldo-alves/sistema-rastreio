@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rastreamento - Import CSV (Terminal + Rastreio)</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <style>
+        /* --- VARIÁVEIS DE ESTILO --- */
+        :root {
+            --color-primary: #0ea5e9;
+            --color-primary-hover: #0284c7;
+            --color-background: #f8fafc;
+            --color-header-bg: #e2e8f0;
+            --color-success: #10b981;
+            --color-error: #dc2626;
+            --color-text-dark: #1e293b;
+            --color-border: #e2e8f0;
+        }
+
+        /* --- ESTILOS GLOBAIS / LAYOUT --- */
+        html, body {
+            height: 100%;
+            background: var(--color-background);
+            margin: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+            color: var(--color-text-dark);
+            padding: 20px;
+        }
+
+        .app-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        @media (min-width: 1024px) {
+            .app-grid {
+                grid-template-columns: 320px 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 400px;
+        }
+
+        /* --- COMPONENTES --- */
+        .input-field {
+            background: white;
+            border: 1px solid var(--color-border);
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            width: 100%;
+            transition: all 0.2s;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+        }
+
+        .btn {
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--color-primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--color-primary-hover);
+        }
+
+        .btn-danger {
+            background: var(--color-error);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: var(--color-error);
+            opacity: 0.9;
+        }
+
+        .btn-secondary {
+            background: white;
+            color: var(--color-text-dark);
+            border: 1px solid var(--color-border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--color-background);
+        }
+
+        .btn-detalhes {
+            padding: 6px 10px;
+            background: var(--color-primary);
+            color: white;
+            font-size: 12px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .btn-detalhes:hover {
+            background: var(--color-primary-hover);
+        }
+
+        /* --- TABELA --- */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+        }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            background: var(--color-header-bg);
+            z-index: 5;
+            border-bottom: 2px solid var(--color-border);
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: 700;
+            font-size: 13px;
+            color: var(--color-text-dark);
+            white-space: nowrap;
+        }
+
+        tbody td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 14px;
+            color: var(--color-text-dark);
+            text-overflow: ellipsis;
+        }
+
+        tbody tr:hover {
+            background: #f8fafc;
+        }
+
+        .table-scroll {
+            overflow: auto;
+            flex-grow: 1;
+        }
+
+        /* --- MENSAGENS E BADGES DE STATUS --- */
+        #mensagem {
+            padding: 12px;
+            font-weight: 600;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .msg-default {
+            background: #f0f9ff;
+            color: #0ea5e9;
+            border-left: 4px solid #0ea5e9;
+        }
+
+        .msg-success {
+            background: #e6ffed;
+            color: #155724;
+            border-left: 4px solid var(--color-success);
+        }
+
+        .msg-error {
+            background: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid var(--color-error);
+        }
+
+        .desc-entregue,
+        .desc-atencao {
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .desc-entregue {
+            color: var(--color-success);
+            background-color: #e6ffed;
+        }
+
+        .desc-atencao {
+            color: #856404;
+            background-color: #fff3cd;
+        }
+
+        /* --- MODAL DE DETALHES --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.75);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            width: 95%;
+            max-width: 650px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-content h3 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--color-primary);
+            border-bottom: 2px solid var(--color-border);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .modal-close {
+            float: right;
+            background: none;
+            border: none;
+            font-size: 30px;
+            cursor: pointer;
+            color: #6c757d;
+            transition: color 0.2s;
+        }
+
+        .modal-event-list {
+            position: relative;
+            padding-left: 20px;
+        }
+
+        .modal-event-list::before {
+            content: '';
+            position: absolute;
+            top: 5px;
+            left: 8px;
+            width: 2px;
+            height: calc(100% - 10px);
+            background: var(--color-border);
+        }
+
+        .event-item {
+            position: relative;
+            padding: 0 0 20px 20px;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+
+        .event-item::before {
+            content: '•';
+            position: absolute;
+            top: 0;
+            left: 0;
+            color: var(--color-primary);
+            font-size: 20px;
+            line-height: 1;
+            font-weight: 900;
+        }
+
+        .event-item.entregue::before {
+            color: var(--color-success);
+            content: '✓';
+        }
+
+        .event-item strong {
+            display: block;
+            color: var(--color-text-dark);
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .event-item small {
+            display: block;
+            color: #6c757d;
+            margin-top: 3px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body class="bg-slate-50">
+
+    <header class="flex items-center justify-between border-b border-slate-200 pb-4 mb-6 max-w-7xl mx-auto px-6 pt-6">
+        <h1 class="text-2xl font-bold text-sky-600">📦 Rastreamento - Importar CSV</h1>
+        <button id="btnLogout" class="btn btn-danger">Sair</button>
+    </header>
+
+    <main class="app-grid">
+        <aside class="card h-fit">
+            <h2 class="text-lg font-semibold text-slate-800 mb-4">Carregar / Pesquisar</h2>
+
+            <div class="flex items-center gap-3 mb-4 border-b border-slate-200 pb-4">
+                <input id="inputCodigoUnico" type="text" placeholder="Pesquisar código individualmente" class="input-field" />
+                <button id="btnPesquisar" class="btn btn-primary min-w-max">Buscar</button>
+            </div>
+
+            <h2 class="text-lg font-semibold text-slate-800 mb-4">Processar Lista CSV</h2>
+
+            <input id="arquivoCSV" type="file" accept=".csv,.txt" class="input-field mb-3" />
+            <button id="btnImportar" class="btn btn-primary w-full mb-3">Importar e Processar CSV</button>
+            <button id="btnInterromper" class="btn btn-danger w-full" style="display:none;">❌ Interromper Processamento</button>
+
+            <div id="progressContainer" class="mt-4" style="display:none;">
+                <div class="w-full bg-slate-200 rounded-full h-2.5">
+                    <div id="progresso" class="bg-sky-500 h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+                <div id="progressText" class="text-xs text-slate-500 mt-1 text-center">Processando...</div>
+            </div>
+
+            <div class="border-t border-slate-200 my-4"></div>
+
+            <button id="btnExportar" class="btn btn-secondary w-full">Exportar Resultado (XLSX)</button>
+        </aside>
+
+        <section class="space-y-6">
+            <div id="mensagem" class="msg-default">
+                Pesquise um código individualmente ou selecione um arquivo CSV.
+            </div>
+
+            <div class="table-container">
+                <div class="p-4 border-b border-slate-100">
+                    <h3 class="text-xl font-semibold text-slate-800">Tabela de Rastreios</h3>
+                </div>
+
+                <div class="table-scroll">
+                    <table id="tabela" aria-live="polite">
+                        <thead>
+                            <tr>
+                                <th>Terminal</th>
+                                <th>Código de postagem</th>
+                                <th>Descrição</th>
+                                <th>Previsão de entrega</th>
+                                <th>Local</th>
+                                <th>Detalhes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="modalDetalhes" class="modal-overlay" onclick="if(event.target === this) fecharModal()">
+        <div class="modal-content">
+            <button class="modal-close" onclick="fecharModal()">&times;</button>
+            <h3 id="modalTitulo">Detalhes do Rastreio</h3>
+            <div id="modalCorpo"></div>
+        </div>
+    </div>
+
+    <script>
+        // =========================================================================
+        // 1. CORREÇÃO DO BOTÃO SAIR (LOGOUT)
+        // =========================================================================
+        const token = localStorage.getItem('authToken');
+
+        // Se a API_BASE_URL estiver vazia, o fetch não funcionará.
+        const API_BASE_URL = ''; // ⚠️ VERIFIQUE SE ESTA URL ESTÁ CORRETA!
+
+        // Se não houver token, alerta e redireciona.
+        if (!token) {
+            alert('❌ Você precisa estar logado para acessar esta página.');
+            window.location.href = 'login.html';
+        }
+
+        // Logout
+        document.getElementById('btnLogout').addEventListener('click', () => {
+            localStorage.removeItem('authToken'); // O token é removido APENAS ao clicar no botão.
+            window.location.href = 'login.html';
+        });
+
+        // --- CONTROLE DE RASTREIO ---
+        let dadosRastreioCompleto = {};
+        let isProcessing = false;
+        const fileInput = document.getElementById('arquivoCSV');
+        const btnImportar = document.getElementById('btnImportar');
+        const btnInterromper = document.getElementById('btnInterromper');
+        const btnExportar = document.getElementById('btnExportar');
+        const btnPesquisar = document.getElementById('btnPesquisar');
+        const inputCodigoUnico = document.getElementById('inputCodigoUnico');
+        const mensagem = document.getElementById('mensagem');
+        const tabelaBody = document.getElementById('tabelaBody');
+        const progresso = document.getElementById('progresso');
+        const progressText = document.getElementById('progressText');
+        const progressContainer = document.getElementById('progressContainer');
+        const modalDetalhes = document.getElementById('modalDetalhes');
+        const modalTitulo = document.getElementById('modalTitulo');
+        const modalCorpo = document.getElementById('modalCorpo');
+        let resultados = [];
+
+        // --- EVENT LISTENERS ---
+        btnImportar.addEventListener('click', () => {
+            const file = fileInput.files[0];
+            if (!file) return alert('Selecione um arquivo CSV (.csv ou .txt) com duas colunas: Terminal e Rastreio.');
+            tabelaBody.innerHTML = '';
+            resultados = [];
+            readAndProcessFile(file);
+        });
+
+        btnPesquisar.addEventListener('click', () => {
+            const codigo = inputCodigoUnico.value.trim();
+            if (!codigo) return alert('Por favor, insira um código de postagem.');
+            tabelaBody.innerHTML = '';
+            resultados = [];
+            processarRastreioIndividual(codigo);
+        });
+
+        btnInterromper.addEventListener('click', () => {
+            isProcessing = false;
+            mensagem.textContent = '⛔ Processamento interrompido pelo usuário.';
+            mensagem.className = 'msg-error';
+            btnInterromper.style.display = 'none';
+            progressContainer.style.display = 'none';
+        });
+
+        btnExportar.addEventListener('click', () => {
+            exportarResultadosXLSX();
+        });
+
+        // --- FUNÇÕES PRINCIPAIS ---
+
+        async function processarRastreioIndividual(codigo) {
+            mensagem.textContent = `Processando código único: ${codigo}...`;
+            mensagem.className = 'msg-default';
+            isProcessing = true;
+            progressContainer.style.display = 'block';
+
+            await processarItem({
+                terminal: 'Manual',
+                codigo: codigo
+            }, 1, 1);
+
+            isProcessing = false;
+            progressContainer.style.display = 'none';
+
+            // 💡 CORREÇÃO APLICADA: Limpa o campo após a pesquisa
+            inputCodigoUnico.value = '';
+
+            if (resultados.length > 0 && resultados[0].status !== 'ERRO') {
+                mensagem.textContent = `Processamento finalizado. Você pode exportar.`;
+                mensagem.className = 'msg-success';
+            } else {
+                mensagem.textContent = `Busca finalizada. Nenhum resultado válido encontrado ou erro na API.`;
+                mensagem.className = 'msg-error';
+            }
+        }
+
+        async function readAndProcessFile(file) {
+            mensagem.textContent = 'Lendo arquivo...';
+            mensagem.className = 'msg-default';
+            resultados = [];
+            dadosRastreioCompleto = {};
+            isProcessing = true;
+
+            try {
+                const text = await file.text();
+                const lines = parseLines(text).map(l => l.trim()).filter(l => l);
+                if (lines.length === 0) {
+                    mensagem.textContent = 'Arquivo vazio.';
+                    mensagem.className = 'msg-error';
+                    isProcessing = false;
+                    return;
+                }
+
+                const sample = lines.slice(0, 5).join('\n');
+                const delim = detectDelimiter(sample);
+
+                const parsed = [];
+                for (let i = 0; i < lines.length; i++) {
+                    const raw = lines[i].trim();
+                    if (!raw) continue;
+                    const cols = raw.split(delim).map(c => c.replace(/"/g, '').trim());
+
+                    if (i === 0 && (cols[0]?.toLowerCase().includes('terminal') || cols[1]?.toLowerCase().includes('rastreio'))) continue;
+
+                    if (cols.length >= 2) parsed.push({
+                        terminal: cols[0],
+                        codigo: cols[1]
+                    });
+                }
+
+                const lista = parsed.map(p => ({
+                    terminal: (p.terminal || '').trim(),
+                    codigo: (p.codigo || '').trim()
+                })).filter(p => p.codigo);
+
+                if (lista.length === 0) {
+                    mensagem.textContent = 'Nenhum código de rastreio válido encontrado. Verifique se o arquivo possui duas colunas (Terminal;Rastreio).';
+                    mensagem.className = 'msg-error';
+                    isProcessing = false;
+                    return;
+                }
+
+                mensagem.textContent = `Processando ${lista.length} rastreios...`;
+                progressContainer.style.display = 'block';
+                progresso.style.width = '0%';
+                progressText.textContent = '0%';
+                btnInterromper.style.display = 'inline-flex';
+
+                for (let i = 0; i < lista.length; i++) {
+                    if (!isProcessing) break;
+                    const item = lista[i];
+                    await processarItem(item, i + 1, lista.length);
+
+                    const percent = Math.round(((i + 1) / lista.length) * 100);
+                    progresso.style.width = `${percent}%`;
+                    progressText.textContent = `${percent}% (${i + 1}/${lista.length})`;
+                }
+
+                progressContainer.style.display = 'none';
+                btnInterromper.style.display = 'none';
+                if (isProcessing) {
+                    mensagem.textContent = `Processamento finalizado (${resultados.length} resultados). Você pode exportar.`;
+                    mensagem.className = 'msg-success';
+                }
+                isProcessing = false;
+            } catch (e) {
+                console.error("Erro ao ler ou processar o arquivo:", e);
+                mensagem.textContent = `Erro crítico no processamento do arquivo: ${e.message}`;
+                mensagem.className = 'msg-error';
+                isProcessing = false;
+                progressContainer.style.display = 'none';
+                btnInterromper.style.display = 'none';
+            }
+        }
+
+        async function processarItem(item, index, total) {
+            const {
+                terminal,
+                codigo
+            } = item;
+            const codigoTrim = codigo.trim();
+            const tr = document.createElement('tr');
+            tabelaBody.appendChild(tr);
+            tr.innerHTML = `<td class="font-semibold">${terminal}</td><td class="font-mono">${codigoTrim}</td><td colspan="3" class="text-sky-500">Processando... (${index}/${total})</td><td></td>`;
+
+            try {
+                // =========================================================================
+                // 2. CORREÇÃO DA AUTENTICAÇÃO DA API (ASSUMINDO TOKEN ESTRITO)
+                // Se sua API usa um cabeçalho customizado (ex: 'X-API-KEY'), TROQUE AQUI.
+                // =========================================================================
+                const options = {
+                    method: 'GET',
+                    headers: {
+                        // Enviando o token sem o prefixo 'Bearer' para autenticações não-JWT
+                        'Authorization': token, 
+                        'Content-Type': 'application/json'
+                    }
+                };
+                
+                const resp = await fetch(`${API_BASE_URL}/rastreio/${encodeURIComponent(codigoTrim)}`, options);
+                // =========================================================================
+                
+                const data = await resp.json();
+                dadosRastreioCompleto[codigoTrim] = data;
+
+                // Também verifica se o erro é de autenticação ou se o rastreio não existe
+                if (data.erro || !data.rastreio || data.rastreio?.code === 'unauthenticated') { 
+                    const erroMsg = data.mensagem || data.rastreio?.message || 'Não encontrado ou sem rastreio.'; 
+                    tr.innerHTML = `<td>${terminal}</td><td class="font-mono">${codigoTrim}</td><td class="text-red-600" colspan="3">Erro: ${erroMsg}</td><td><button class="btn-detalhes" onclick="abrirModal('${codigoTrim}')">JSON</button></td>`;
+                    resultados.push({
+                        terminal,
+                        codigo: codigoTrim,
+                        previsto: '',
+                        descricao: `Erro: ${erroMsg}`,
+                        local: '',
+                        status: 'ERRO'
+                    });
+                    return;
+                }
+
+                const r = data.rastreio;
+                const evt = (r.eventos && r.eventos.length > 0) ? r.eventos[0] : null;
+
+                // CORREÇÃO: Usando 'dtPrevista' do JSON
+                const previsao = r.dtPrevista || '';
+
+                const descricao = evt ? evt.descricao : r.status || '';
+
+                // CORREÇÃO: Buscando Cidade e UF aninhados em 'unidade.endereco'
+                const cidade = evt?.unidade?.endereco?.cidade?.trim() || '';
+                const uf = evt?.unidade?.endereco?.uf?.trim() || '';
+                const local = (cidade && uf) ? `${cidade} - ${uf}` : cidade || uf || '';
+
+                const statusClass = (descricao.toLowerCase().includes('entregue')) ? 'desc-entregue' : 'desc-atencao';
+
+                tr.innerHTML = `<td>${terminal}</td><td class="font-mono">${codigoTrim}</td><td><span class="${statusClass}">${descricao}</span></td><td>${previsao}</td><td>${local}</td><td><button class="btn-detalhes" onclick="abrirModal('${codigoTrim}')">Detalhes</button></td>`;
+
+                resultados.push({
+                    terminal,
+                    codigo: codigoTrim,
+                    previsto: previsao,
+                    descricao,
+                    local,
+                    status: (descricao.toLowerCase().includes('entregue') ? 'ENTREGUE' : 'ATENCAO')
+                });
+
+            } catch (err) {
+                console.error('Erro ao processar item:', err);
+                tr.innerHTML = `<td>${terminal}</td><td class="font-mono">${codigoTrim}</td><td class="text-red-600" colspan="3">Erro de conexão/processamento interno</td><td><button class="btn-detalhes" onclick="abrirModal('${codigoTrim}')">JSON</button></td>`;
+                resultados.push({
+                    terminal,
+                    codigo: codigoTrim,
+                    previsto: '',
+                    descricao: 'Erro de processamento',
+                    local: '',
+                    status: 'ERRO'
+                });
+            }
+        }
+
+        function abrirModal(codigo) {
+            const data = dadosRastreioCompleto[codigo];
+            modalTitulo.textContent = `Detalhes - ${codigo}`;
+            modalCorpo.innerHTML = '';
+
+            if (!data) {
+                modalCorpo.textContent = 'Sem dados disponíveis.';
+                modalDetalhes.style.display = 'flex';
+                return;
+            }
+
+            if (data.rastreio && data.rastreio.eventos && data.rastreio.eventos.length > 0) {
+                const ul = document.createElement('div');
+                ul.className = 'modal-event-list';
+
+                data.rastreio.eventos.forEach(e => {
+                    const div = document.createElement('div');
+                    div.className = 'event-item';
+
+                    if (e.descricao?.toLowerCase().includes('entregue')) div.classList.add('entregue');
+
+                    const dataHora = e.dtHrCriado?.date?.split('.')[0].replace(/-/g, '/').replace(' ', ' - ') || 'Data indisponível';
+
+                    const end = e.unidade?.endereco;
+                    const eventoLocal = end?.cidade ? `${end.cidade} (${end.uf})` : end?.logradouro || e.unidade?.tipo || '';
+
+                    div.innerHTML = `<strong>${e.descricao}</strong><small>${dataHora} | ${eventoLocal}</small>`;
+                    ul.appendChild(div);
+                });
+                modalCorpo.appendChild(ul);
+            } else {
+                const pre = document.createElement('pre');
+                pre.textContent = JSON.stringify(data, null, 2);
+                modalCorpo.appendChild(pre);
+            }
+            modalDetalhes.style.display = 'flex';
+        }
+
+        function fecharModal() {
+            modalDetalhes.style.display = 'none';
+        }
+
+        function exportarResultadosXLSX() {
+            if (resultados.length === 0) return alert('Nenhum resultado disponível para exportar.');
+
+            const dataForExport = resultados.map(r => ({
+                'Terminal': r.terminal,
+                'Código de Postagem': r.codigo,
+                'Status Principal': r.descricao,
+                'Previsão de Entrega': r.previsto,
+                'Local Mais Recente': r.local,
+                'Status (Interno)': r.status,
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(dataForExport);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Rastreios');
+            XLSX.writeFile(wb, 'rastreio_resultado.xlsx');
+        }
+
+        // --- FUNÇÕES AUXILIARES ---
+        function parseLines(text) {
+            return text.split(/\r?\n/);
+        }
+
+        function detectDelimiter(sample) {
+            return sample.includes(';') ? ';' : (sample.includes(',') ? ',' : '\t');
+        }
+    </script>
+
+</body>
+</html>
