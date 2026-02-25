@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.get("/:codigo", async (req, res) => {
     const codigo = req.params.codigo.trim();
-    const apiKey = process.env.API_KEY; 
+    const apiKey = process.env.API_KEY;
     const woncaApiUrl = "https://api-labs.wonca.com.br/wonca.labs.v1.LabsService/Track";
 
     if (!apiKey) {
@@ -39,8 +39,9 @@ router.get("/:codigo", async (req, res) => {
                 detalhes: data
             });
         }
-        
+
         let rastreioDetalhado = null;
+        let resultadosLidos = [];
 
         // A API Wonca devolve o rastreio dentro da propriedade "json" como string
         if (data && data.json) {
@@ -56,8 +57,24 @@ router.get("/:codigo", async (req, res) => {
             }
         }
 
+        // Fazer parse também da lista de results para o frontend ter acesso a todas as transportadoras
+        if (data && data.results && Array.isArray(data.results)) {
+            data.results.forEach(item => {
+                if (item.json) {
+                    try {
+                        const parsed = JSON.parse(item.json);
+                        resultadosLidos.push({
+                            carrier: item.carrier,
+                            code: item.code,
+                            rastreio: parsed
+                        });
+                    } catch (e) { }
+                }
+            });
+        }
+
         // Caso não haja dados de rastreio
-        if (!rastreioDetalhado || !rastreioDetalhado.codObjeto) {
+        if (!rastreioDetalhado && resultadosLidos.length === 0) {
             return res.status(404).json({
                 codigo,
                 erro: true,
@@ -71,7 +88,8 @@ router.get("/:codigo", async (req, res) => {
             codigo,
             erro: false,
             mensagem: "Consulta realizada com sucesso",
-            rastreio: rastreioDetalhado
+            rastreio: rastreioDetalhado || (resultadosLidos.length > 0 ? resultadosLidos[0].rastreio : null),
+            transportadoras: resultadosLidos
         });
 
     } catch (err) {

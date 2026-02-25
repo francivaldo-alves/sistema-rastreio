@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -22,7 +23,8 @@
         }
 
         /* --- ESTILOS GLOBAIS / LAYOUT --- */
-        html, body {
+        html,
+        body {
             height: 100%;
             background: var(--color-background);
             margin: 0;
@@ -316,6 +318,7 @@
         }
     </style>
 </head>
+
 <body class="bg-slate-50">
 
     <header class="flex items-center justify-between border-b border-slate-200 pb-4 mb-6 max-w-7xl mx-auto px-6 pt-6">
@@ -328,7 +331,8 @@
             <h2 class="text-lg font-semibold text-slate-800 mb-4">Carregar / Pesquisar</h2>
 
             <div class="flex items-center gap-3 mb-4 border-b border-slate-200 pb-4">
-                <input id="inputCodigoUnico" type="text" placeholder="Pesquisar código individualmente" class="input-field" />
+                <input id="inputCodigoUnico" type="text" placeholder="Pesquisar código individualmente"
+                    class="input-field" />
                 <button id="btnPesquisar" class="btn btn-primary min-w-max">Buscar</button>
             </div>
 
@@ -336,7 +340,8 @@
 
             <input id="arquivoCSV" type="file" accept=".csv,.txt" class="input-field mb-3" />
             <button id="btnImportar" class="btn btn-primary w-full mb-3">Importar e Processar CSV</button>
-            <button id="btnInterromper" class="btn btn-danger w-full" style="display:none;">❌ Interromper Processamento</button>
+            <button id="btnInterromper" class="btn btn-danger w-full" style="display:none;">❌ Interromper
+                Processamento</button>
 
             <div id="progressContainer" class="mt-4" style="display:none;">
                 <div class="w-full bg-slate-200 rounded-full h-2.5">
@@ -389,292 +394,388 @@
     </div>
 
     <script>
-    // --- CONFIGURAÇÃO ---
-    const API_BASE_URL = ''; // coloque sua URL aqui
+        // --- CONFIGURAÇÃO ---
+        const API_BASE_URL = ''; // coloque sua URL aqui
 
-    let dadosRastreioCompleto = {};
-    let isProcessing = false;
-    const fileInput = document.getElementById('arquivoCSV');
-    const btnImportar = document.getElementById('btnImportar');
-    const btnInterromper = document.getElementById('btnInterromper');
-    const btnExportar = document.getElementById('btnExportar');
-    const btnPesquisar = document.getElementById('btnPesquisar');
-    const inputCodigoUnico = document.getElementById('inputCodigoUnico');
-    const mensagem = document.getElementById('mensagem');
-    const tabelaBody = document.getElementById('tabelaBody');
-    const progresso = document.getElementById('progresso');
-    const progressText = document.getElementById('progressText');
-    const progressContainer = document.getElementById('progressContainer');
-    const modalDetalhes = document.getElementById('modalDetalhes');
-    const modalTitulo = document.getElementById('modalTitulo');
-    const modalCorpo = document.getElementById('modalCorpo');
-    let resultados = [];
+        let dadosRastreioCompleto = {};
+        let isProcessing = false;
+        const fileInput = document.getElementById('arquivoCSV');
+        const btnImportar = document.getElementById('btnImportar');
+        const btnInterromper = document.getElementById('btnInterromper');
+        const btnExportar = document.getElementById('btnExportar');
+        const btnPesquisar = document.getElementById('btnPesquisar');
+        const inputCodigoUnico = document.getElementById('inputCodigoUnico');
+        const mensagem = document.getElementById('mensagem');
+        const tabelaBody = document.getElementById('tabelaBody');
+        const progresso = document.getElementById('progresso');
+        const progressText = document.getElementById('progressText');
+        const progressContainer = document.getElementById('progressContainer');
+        const modalDetalhes = document.getElementById('modalDetalhes');
+        const modalTitulo = document.getElementById('modalTitulo');
+        const modalCorpo = document.getElementById('modalCorpo');
+        let resultados = [];
 
-    // --- REMOVIDO LOGIN COMPLETAMENTE ---
-    // Nada de token, nada de logout, nada de redirecionamento.
+        // --- REMOVIDO LOGIN COMPLETAMENTE ---
+        // Nada de token, nada de logout, nada de redirecionamento.
 
-    // --- EVENTOS ---
-    btnImportar.addEventListener('click', () => {
-        const file = fileInput.files[0];
-        if (!file) return alert('Selecione um arquivo CSV (.csv ou .txt) com duas colunas: Terminal e Rastreio.');
-        tabelaBody.innerHTML = '';
-        resultados = [];
-        readAndProcessFile(file);
-    });
+        // --- EVENTOS ---
+        btnImportar.addEventListener('click', () => {
+            const file = fileInput.files[0];
+            if (!file) return alert('Selecione um arquivo CSV (.csv ou .txt) com duas colunas: Terminal e Rastreio.');
+            tabelaBody.innerHTML = '';
+            resultados = [];
+            readAndProcessFile(file);
+        });
 
-    btnPesquisar.addEventListener('click', () => {
-        const codigo = inputCodigoUnico.value.trim();
-        if (!codigo) return alert('Por favor, insira um código de postagem.');
-        tabelaBody.innerHTML = '';
-        resultados = [];
-        processarRastreioIndividual(codigo);
-    });
+        btnPesquisar.addEventListener('click', () => {
+            const codigo = inputCodigoUnico.value.trim();
+            if (!codigo) return alert('Por favor, insira um código de postagem.');
+            tabelaBody.innerHTML = '';
+            resultados = [];
+            processarRastreioIndividual(codigo);
+        });
 
-    btnInterromper.addEventListener('click', () => {
-        isProcessing = false;
-        mensagem.textContent = '⛔ Processamento interrompido pelo usuário.';
-        mensagem.className = 'msg-error';
-        btnInterromper.style.display = 'none';
-        progressContainer.style.display = 'none';
-    });
-
-    btnExportar.addEventListener('click', () => {
-        exportarResultadosXLSX();
-    });
-
-    // --- FUNÇÕES PRINCIPAIS ---
-
-    async function processarRastreioIndividual(codigo) {
-        mensagem.textContent = `Processando código único: ${codigo}...`;
-        mensagem.className = 'msg-default';
-        isProcessing = true;
-        progressContainer.style.display = 'block';
-
-        await processarItem({
-            terminal: 'Manual',
-            codigo: codigo
-        }, 1, 1);
-
-        isProcessing = false;
-        progressContainer.style.display = 'none';
-
-        inputCodigoUnico.value = '';
-
-        if (resultados.length > 0 && resultados[0].status !== 'ERRO') {
-            mensagem.textContent = `Processamento finalizado. Você pode exportar.`;
-            mensagem.className = 'msg-success';
-        } else {
-            mensagem.textContent = `Busca finalizada. Nenhum resultado válido encontrado ou erro na API.`;
+        btnInterromper.addEventListener('click', () => {
+            isProcessing = false;
+            mensagem.textContent = '⛔ Processamento interrompido pelo usuário.';
             mensagem.className = 'msg-error';
-        }
-    }
+            btnInterromper.style.display = 'none';
+            progressContainer.style.display = 'none';
+        });
 
-    async function readAndProcessFile(file) {
-        mensagem.textContent = 'Lendo arquivo...';
-        mensagem.className = 'msg-default';
-        resultados = [];
-        dadosRastreioCompleto = {};
-        isProcessing = true;
+        btnExportar.addEventListener('click', () => {
+            exportarResultadosXLSX();
+        });
 
-        try {
-            const text = await file.text();
-            const lines = parseLines(text).map(l => l.trim()).filter(l => l);
-            if (lines.length === 0) {
-                mensagem.textContent = 'Arquivo vazio.';
-                mensagem.className = 'msg-error';
-                isProcessing = false;
-                return;
-            }
+        // --- FUNÇÕES PRINCIPAIS ---
 
-            const sample = lines.slice(0, 5).join('\n');
-            const delim = detectDelimiter(sample);
-
-            const parsed = [];
-            for (let i = 0; i < lines.length; i++) {
-                const raw = lines[i].trim();
-                if (!raw) continue;
-                const cols = raw.split(delim).map(c => c.replace(/"/g, '').trim());
-
-                if (i === 0 && (cols[0]?.toLowerCase().includes('terminal') || cols[1]?.toLowerCase().includes('rastreio'))) continue;
-
-                if (cols.length >= 2) parsed.push({
-                    terminal: cols[0],
-                    codigo: cols[1]
-                });
-            }
-
-            const lista = parsed.map(p => ({
-                terminal: (p.terminal || '').trim(),
-                codigo: (p.codigo || '').trim()
-            })).filter(p => p.codigo);
-
-            if (lista.length === 0) {
-                mensagem.textContent = 'Nenhum código válido encontrado no CSV.';
-                mensagem.className = 'msg-error';
-                isProcessing = false;
-                return;
-            }
-
-            mensagem.textContent = `Processando ${lista.length} rastreios...`;
+        async function processarRastreioIndividual(codigo) {
+            mensagem.textContent = `Processando código único: ${codigo}...`;
+            mensagem.className = 'msg-default';
+            isProcessing = true;
             progressContainer.style.display = 'block';
-            progresso.style.width = '0%';
-            progressText.textContent = '0%';
-            btnInterromper.style.display = 'inline-flex';
 
-            for (let i = 0; i < lista.length; i++) {
-                if (!isProcessing) break;
-                const item = lista[i];
-                await processarItem(item, i + 1, lista.length);
+            await processarItem({
+                terminal: 'Manual',
+                codigo: codigo
+            }, 1, 1);
 
-                const percent = Math.round(((i + 1) / lista.length) * 100);
-                progresso.style.width = `${percent}%`;
-                progressText.textContent = `${percent}% (${i + 1}/${lista.length})`;
-            }
-
+            isProcessing = false;
             progressContainer.style.display = 'none';
-            btnInterromper.style.display = 'none';
-            if (isProcessing) {
-                mensagem.textContent = `Processamento finalizado (${resultados.length} resultados). Você pode exportar.`;
+
+            inputCodigoUnico.value = '';
+
+            if (resultados.length > 0 && resultados[0].status !== 'ERRO') {
+                mensagem.textContent = `Processamento finalizado. Você pode exportar.`;
                 mensagem.className = 'msg-success';
+            } else {
+                mensagem.textContent = `Busca finalizada. Nenhum resultado válido encontrado ou erro na API.`;
+                mensagem.className = 'msg-error';
             }
-            isProcessing = false;
-        } catch (e) {
-            console.error("Erro ao ler CSV:", e);
-            mensagem.textContent = `Erro ao ler o arquivo: ${e.message}`;
-            mensagem.className = 'msg-error';
-            isProcessing = false;
-            progressContainer.style.display = 'none';
-            btnInterromper.style.display = 'none';
         }
-    }
 
-    async function processarItem(item, index, total) {
-        const { terminal, codigo } = item;
-        const codigoTrim = codigo.trim();
-        const tr = document.createElement('tr');
-        tabelaBody.appendChild(tr);
-        tr.innerHTML = `<td>${terminal}</td><td>${codigoTrim}</td><td colspan="3" class="text-sky-500">Processando... (${index}/${total})</td><td></td>`;
+        async function readAndProcessFile(file) {
+            mensagem.textContent = 'Lendo arquivo...';
+            mensagem.className = 'msg-default';
+            resultados = [];
+            dadosRastreioCompleto = {};
+            isProcessing = true;
 
-        try {
-            const resp = await fetch(`${API_BASE_URL}/rastreio/${encodeURIComponent(codigoTrim)}`);
-            const data = await resp.json();
+            try {
+                const text = await file.text();
+                const lines = parseLines(text).map(l => l.trim()).filter(l => l);
+                if (lines.length === 0) {
+                    mensagem.textContent = 'Arquivo vazio.';
+                    mensagem.className = 'msg-error';
+                    isProcessing = false;
+                    return;
+                }
 
-            dadosRastreioCompleto[codigoTrim] = data;
+                const sample = lines.slice(0, 5).join('\n');
+                const delim = detectDelimiter(sample);
 
-            if (data.erro || !data.rastreio) {
-                const erroMsg = data.mensagem || 'Não encontrado.';
+                const parsed = [];
+                for (let i = 0; i < lines.length; i++) {
+                    const raw = lines[i].trim();
+                    if (!raw) continue;
+                    const cols = raw.split(delim).map(c => c.replace(/"/g, '').trim());
+
+                    if (i === 0 && (cols[0]?.toLowerCase().includes('terminal') || cols[1]?.toLowerCase().includes('rastreio'))) continue;
+
+                    if (cols.length >= 2) parsed.push({
+                        terminal: cols[0],
+                        codigo: cols[1]
+                    });
+                }
+
+                const lista = parsed.map(p => ({
+                    terminal: (p.terminal || '').trim(),
+                    codigo: (p.codigo || '').trim()
+                })).filter(p => p.codigo);
+
+                if (lista.length === 0) {
+                    mensagem.textContent = 'Nenhum código válido encontrado no CSV.';
+                    mensagem.className = 'msg-error';
+                    isProcessing = false;
+                    return;
+                }
+
+                mensagem.textContent = `Processando ${lista.length} rastreios...`;
+                progressContainer.style.display = 'block';
+                progresso.style.width = '0%';
+                progressText.textContent = '0%';
+                btnInterromper.style.display = 'inline-flex';
+
+                for (let i = 0; i < lista.length; i++) {
+                    if (!isProcessing) break;
+                    const item = lista[i];
+                    await processarItem(item, i + 1, lista.length);
+
+                    const percent = Math.round(((i + 1) / lista.length) * 100);
+                    progresso.style.width = `${percent}%`;
+                    progressText.textContent = `${percent}% (${i + 1}/${lista.length})`;
+                }
+
+                progressContainer.style.display = 'none';
+                btnInterromper.style.display = 'none';
+                if (isProcessing) {
+                    mensagem.textContent = `Processamento finalizado (${resultados.length} resultados). Você pode exportar.`;
+                    mensagem.className = 'msg-success';
+                }
+                isProcessing = false;
+            } catch (e) {
+                console.error("Erro ao ler CSV:", e);
+                mensagem.textContent = `Erro ao ler o arquivo: ${e.message}`;
+                mensagem.className = 'msg-error';
+                isProcessing = false;
+                progressContainer.style.display = 'none';
+                btnInterromper.style.display = 'none';
+            }
+        }
+
+        async function processarItem(item, index, total) {
+            const { terminal, codigo } = item;
+            const codigoTrim = codigo.trim();
+            const tr = document.createElement('tr');
+            tabelaBody.appendChild(tr);
+            tr.innerHTML = `<td>${terminal}</td><td>${codigoTrim}</td><td colspan="3" class="text-sky-500">Processando... (${index}/${total})</td><td></td>`;
+
+            try {
+                const resp = await fetch(`${API_BASE_URL}/rastreio/${encodeURIComponent(codigoTrim)}`);
+                const data = await resp.json();
+
+                dadosRastreioCompleto[codigoTrim] = data;
+
+                if (data.erro || !data.rastreio) {
+                    const erroMsg = data.mensagem || 'Não encontrado.';
+                    tr.innerHTML =
+                        `<td>${terminal}</td><td>${codigoTrim}</td><td class="text-red-600" colspan="3">Erro: ${erroMsg}</td><td><button class="btn-detalhes" onclick="abrirModal('${codigoTrim}')">JSON</button></td>`;
+                    resultados.push({
+                        terminal,
+                        codigo: codigoTrim,
+                        previsto: '',
+                        descricao: `Erro: ${erroMsg}`,
+                        local: '',
+                        status: 'ERRO'
+                    });
+                    return;
+                }
+
+                // Se a API retornar multíplas transportadoras, vamos combiná-las
+                let todosEventos = [];
+                let rPrincipal = data.rastreio || {};
+                let temCorreios = false;
+
+                if (data.transportadoras && data.transportadoras.length > 0) {
+                    data.transportadoras.forEach(tz => {
+                        if (tz.carrier === 'CARRIER_CORREIOS') temCorreios = true;
+                        if (tz.rastreio && tz.rastreio.eventos) {
+                            tz.rastreio.eventos.forEach(ev => {
+                                ev._carrierName = tz.carrier;
+                                todosEventos.push(ev);
+                            });
+                        }
+                    });
+                } else if (rPrincipal.eventos) {
+                    // Caso fallback só com rastreioDetalhado
+                    rPrincipal.eventos.forEach(ev => { todosEventos.push(ev); });
+                }
+
+                // Ordena todos os eventos por data descendente (do mais novo para o mais antigo)
+                todosEventos.sort((a, b) => {
+                    const dateA = new Date((a.dtHrCriado?.date || a.dataHora || 0));
+                    const dateB = new Date((b.dtHrCriado?.date || b.dataHora || 0));
+                    return dateB - dateA;
+                });
+
+                // Atualiza o objeto para o Modal usar depois
+                data.rastreio = data.rastreio || {};
+                data.rastreio.eventos = todosEventos;
+
+                const evt = todosEventos.length > 0 ? todosEventos[0] : null;
+                const previsao = rPrincipal.dtPrevista || '';
+                let descricao = evt ? evt.descricao : (rPrincipal.status || 'Sem status');
+
+                // Array de palavras-chave para identificar problemas no histórico
+                const kwsProblema = ['restrito', 'limitação', 'não efetuada', 'atras', 'roubo', 'extravio', 'apreendid', 'fiscaliza', 'ausente', 'incorreto', 'recusado'];
+
+                // Encontrar o alerta mais recente no histórico que contenha essas palavras
+                const evtProb = todosEventos.find(e =>
+                    kwsProblema.some(k =>
+                        (e.descricao && e.descricao.toLowerCase().includes(k)) ||
+                        (e.detalhe && e.detalhe.toLowerCase().includes(k))
+                    )
+                );
+
+                let isRestritoAereo = false;
+                // Variável para guardar um texto mais limpo para o Excel
+                let descricaoExportacao = evt ? evt.descricao : (rPrincipal.status || 'Sem status');
+
+                if (evtProb) {
+                    let descProb = evtProb.descricao;
+                    // Verifica se o problema é especificamente de conteúdo restrito/limitação de transporte aéreo
+                    if (descProb.toLowerCase().includes('conteúdo restrito') || descProb.toLowerCase().includes('limitação de transporte') || (evtProb.detalhe && evtProb.detalhe.toLowerCase().includes('conteúdo restrito'))) {
+                        isRestritoAereo = true;
+                    }
+
+                    // Evitar repetir a descrição caso o detalhe seja muito parecido e não seja link
+                    if (evtProb.detalhe && !descProb.includes(evtProb.detalhe) && !evtProb.detalhe.includes('http')) {
+                        descProb += `<br><span style="font-size:11px;">-> ${evtProb.detalhe}</span>`;
+                    }
+
+                    if (isRestritoAereo) {
+                        descricao += `<div style="margin-top:6px; padding:8px; background:#fff1f2; border:2px solid #e11d48; border-radius:6px; color:#be123c; font-size:13px; font-weight:bold; line-height:1.4; box-shadow: 0 2px 4px rgba(225, 29, 72, 0.2);">🚨 ALERTA CRÍTICO: Risco de Demora<br><span style="font-weight:normal;">${descProb}</span></div>`;
+                        descricaoExportacao += ' (Alerta: Conteúdo restrito/limitação aérea)';
+                    } else {
+                        descricao += `<div style="margin-top:6px; padding:6px 8px; background:#fef2f2; border:1px solid #fca5a5; border-radius:4px; color:#991b1b; font-size:12px; line-height:1.3;"><strong>⚠️ Restrição / Aviso no Histórico:</strong><br>${descProb}</div>`;
+                        descricaoExportacao += ` (Aviso: ${evtProb.descricao})`;
+                    }
+                } else if (evt && evt.detalhe && !evt.detalhe.includes('http')) {
+                    // Fallback: mostrar detalhe simples se não for link de pesquisa
+                    descricao += `<br><span style="font-size:12px; color:#64748b; font-style:italic; display:inline-block; margin-top:4px;">ℹ️ ${evt.detalhe}</span>`;
+                }
+
+                const cidade = evt?.unidade?.endereco?.cidade || '';
+                const uf = evt?.unidade?.endereco?.uf || '';
+                const local = cidade && uf ? `${cidade} - ${uf}` : (cidade || uf);
+
+                let statusClass = descricao.toLowerCase().includes('entregue') ? 'desc-entregue' : 'desc-atencao';
+
+                // Força uma cor de status vermelha se tiver alerta crítico
+                if (isRestritoAereo) {
+                    statusClass = 'desc-atencao';
+                }
+
+                // Adiciona um badge se for dos correios (ou se tiver registro dos correios atrelado)
+                let badgeCorreios = temCorreios ? `<span style="font-size:10px; background:#fef08a; color:#854d0e; padding:2px 6px; border-radius:4px; margin-left:6px; font-weight:bold;">Correios</span>` : '';
+
+                // Adiciona um ícone grande de alerta na coluna de código se for um item crítico
+                let iconAlertaCritico = isRestritoAereo ? `<br><span style="display:inline-block; margin-top:8px; font-size:11px; font-weight:bold; color:#e11d48; background:#ffe4e6; padding:2px 6px; border-radius:4px; border:1px solid #fda4af;">⏳ Risco de Atraso</span>` : '';
+
+                let rowBgClass = isRestritoAereo ? 'bg-red-50' : '';
+
+                tr.className = rowBgClass;
                 tr.innerHTML =
-                    `<td>${terminal}</td><td>${codigoTrim}</td><td class="text-red-600" colspan="3">Erro: ${erroMsg}</td><td><button class="btn-detalhes" onclick="abrirModal('${codigoTrim}')">JSON</button></td>`;
+                    `<td>${terminal}</td><td>${codigoTrim}${badgeCorreios}${iconAlertaCritico}</td><td><span class="${statusClass} ${isRestritoAereo ? 'text-rose-700 bg-rose-100' : ''}">${isRestritoAereo ? '🚨 ' : ''}${descricao}</span></td><td>${previsao}</td><td>${local}</td><td><button class="btn-detalhes" onclick="abrirModal('${codigoTrim}')">Detalhes</button></td>`;
+
                 resultados.push({
                     terminal,
                     codigo: codigoTrim,
-                    previsto: '',
-                    descricao: `Erro: ${erroMsg}`,
-                    local: '',
-                    status: 'ERRO'
+                    previsto: previsao,
+                    descricao,
+                    descricaoExportacao,
+                    local,
+                    agAtrasoDemoraCritico: isRestritoAereo ? 'SIM' : 'NÃO',
+                    status: descricaoExportacao.toLowerCase().includes('entregue') ? 'ENTREGUE' : 'ATENCAO'
                 });
+
+            } catch (err) {
+                console.error("Erro ao processar item:", err);
+            }
+        }
+
+        function abrirModal(codigo) {
+            const data = dadosRastreioCompleto[codigo];
+            modalTitulo.textContent = `Detalhes - ${codigo}`;
+            modalCorpo.innerHTML = '';
+
+            if (!data) {
+                modalCorpo.textContent = 'Sem dados disponíveis.';
+                modalDetalhes.style.display = 'flex';
                 return;
             }
 
-            const r = data.rastreio;
-            const evt = r.eventos?.[0] || null;
-            const previsao = r.dtPrevista || '';
-            const descricao = evt ? evt.descricao : r.status;
-            const cidade = evt?.unidade?.endereco?.cidade || '';
-            const uf = evt?.unidade?.endereco?.uf || '';
-            const local = cidade && uf ? `${cidade} - ${uf}` : cidade || uf;
+            if (data.rastreio?.eventos?.length > 0) {
+                const ul = document.createElement('div');
+                ul.className = 'modal-event-list';
 
-            const statusClass = descricao.toLowerCase().includes('entregue') ? 'desc-entregue' : 'desc-atencao';
+                data.rastreio.eventos.forEach(e => {
+                    const div = document.createElement('div');
+                    div.className = 'event-item';
 
-            tr.innerHTML =
-                `<td>${terminal}</td><td>${codigoTrim}</td><td><span class="${statusClass}">${descricao}</span></td><td>${previsao}</td><td>${local}</td><td><button class="btn-detalhes" onclick="abrirModal('${codigoTrim}')">Detalhes</button></td>`;
+                    let dataHoraStr = e.dtHrCriado?.date?.split('.')[0] || 'Data indisponível';
+                    if (dataHoraStr === 'Data indisponível' && e.dataHora) {
+                        dataHoraStr = e.dataHora;
+                    }
 
-            resultados.push({
-                terminal,
-                codigo: codigoTrim,
-                previsto: previsao,
-                descricao,
-                local,
-                status: descricao.toLowerCase().includes('entregue') ? 'ENTREGUE' : 'ATENCAO'
-            });
+                    const end = e.unidade?.endereco;
+                    const eventoLocal = end?.cidade ? `${end.cidade} (${end.uf})` : '';
 
-        } catch (err) {
-            console.error("Erro ao processar item:", err);
-        }
-    }
+                    let carrierTag = '';
+                    if (e._carrierName) {
+                        let cName = e._carrierName === 'CARRIER_CORREIOS' ? 'Correios' : e._carrierName;
+                        carrierTag = `<span style="font-size:10px; background:#e2e8f0; color:#475569; padding:2px 4px; border-radius:3px; margin-left:5px;">${cName}</span>`;
+                    }
 
-    function abrirModal(codigo) {
-        const data = dadosRastreioCompleto[codigo];
-        modalTitulo.textContent = `Detalhes - ${codigo}`;
-        modalCorpo.innerHTML = '';
+                    div.innerHTML =
+                        `<strong>${e.descricao} ${carrierTag}</strong><small>${dataHoraStr} ${eventoLocal ? '| ' + eventoLocal : ''}</small>`;
+                    ul.appendChild(div);
+                });
+                modalCorpo.appendChild(ul);
+            } else {
+                const pre = document.createElement('pre');
+                pre.textContent = JSON.stringify(data, null, 2);
+                modalCorpo.appendChild(pre);
+            }
 
-        if (!data) {
-            modalCorpo.textContent = 'Sem dados disponíveis.';
             modalDetalhes.style.display = 'flex';
-            return;
         }
 
-        if (data.rastreio?.eventos?.length > 0) {
-            const ul = document.createElement('div');
-            ul.className = 'modal-event-list';
-
-            data.rastreio.eventos.forEach(e => {
-                const div = document.createElement('div');
-                div.className = 'event-item';
-
-                const dataHora = e.dtHrCriado?.date?.split('.')[0] || 'Data indisponível';
-
-                const end = e.unidade?.endereco;
-                const eventoLocal = end?.cidade ? `${end.cidade} (${end.uf})` : '';
-
-                div.innerHTML =
-                    `<strong>${e.descricao}</strong><small>${dataHora} | ${eventoLocal}</small>`;
-                ul.appendChild(div);
-            });
-            modalCorpo.appendChild(ul);
-        } else {
-            const pre = document.createElement('pre');
-            pre.textContent = JSON.stringify(data, null, 2);
-            modalCorpo.appendChild(pre);
+        function fecharModal() {
+            modalDetalhes.style.display = 'none';
         }
 
-        modalDetalhes.style.display = 'flex';
-    }
+        function exportarResultadosXLSX() {
+            if (resultados.length === 0) return alert('Nenhum resultado disponível para exportar.');
 
-    function fecharModal() {
-        modalDetalhes.style.display = 'none';
-    }
+            const dataForExport = resultados.map(r => ({
+                'Terminal': r.terminal,
+                'Código de Postagem': r.codigo,
+                'Status Principal': r.descricaoExportacao,
+                'Alerta Demora': r.agAtrasoDemoraCritico,
+                'Previsão de Entrega': r.previsto,
+                'Local': r.local
+            }));
 
-    function exportarResultadosXLSX() {
-        if (resultados.length === 0) return alert('Nenhum resultado disponível para exportar.');
+            const ws = XLSX.utils.json_to_sheet(dataForExport);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Rastreios');
+            XLSX.writeFile(wb, 'rastreios.xlsx');
+        }
 
-        const dataForExport = resultados.map(r => ({
-            'Terminal': r.terminal,
-            'Código de Postagem': r.codigo,
-            'Status Principal': r.descricao,
-            'Previsão de Entrega': r.previsto,
-            'Local Mais Recente': r.local,
-            'Status': r.status
-        }));
+        // Funções auxiliares
+        function parseLines(text) {
+            return text.split(/\r?\n/);
+        }
 
-        const ws = XLSX.utils.json_to_sheet(dataForExport);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Rastreios');
-        XLSX.writeFile(wb, 'rastreios.xlsx');
-    }
-
-    // Funções auxiliares
-    function parseLines(text) {
-        return text.split(/\r?\n/);
-    }
-
-    function detectDelimiter(sample) {
-        if (sample.includes(';')) return ';';
-        if (sample.includes(',')) return ',';
-        return ';';
-    }
-</script>
+        function detectDelimiter(sample) {
+            if (sample.includes(';')) return ';';
+            if (sample.includes(',')) return ',';
+            return ';';
+        }
+    </script>
 
 
 </body>
+
 </html>
