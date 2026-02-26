@@ -372,6 +372,7 @@
                                 <th>Terminal</th>
                                 <th>Código de postagem</th>
                                 <th>Descrição</th>
+                                <th>Dias</th>
                                 <th>Previsão de entrega</th>
                                 <th>Local</th>
                                 <th>Detalhes</th>
@@ -558,7 +559,7 @@
             const codigoTrim = codigo.trim();
             const tr = document.createElement('tr');
             tabelaBody.appendChild(tr);
-            tr.innerHTML = `<td>${terminal}</td><td>${codigoTrim}</td><td colspan="3" class="text-sky-500">Processando... (${index}/${total})</td><td></td>`;
+            tr.innerHTML = `<td>${terminal}</td><td>${codigoTrim}</td><td colspan="4" class="text-sky-500">Processando... (${index}/${total})</td><td></td>`;
 
             try {
                 const resp = await fetch(`${API_BASE_URL}/rastreio/${encodeURIComponent(codigoTrim)}`);
@@ -567,15 +568,24 @@
                 dadosRastreioCompleto[codigoTrim] = data;
 
                 if (data.erro || !data.rastreio) {
-                    const erroMsg = data.mensagem || 'Não encontrado.';
+                    let erroMsg = data.mensagem || 'Não encontrado.';
+
+                    // Tratamento para erro de indisponibilidade da API dos Correios (via Wonca)
+                    if (erroMsg.includes('retries exceeded') || erroMsg.includes('unexpected EOF') || erroMsg.includes('timeout')) {
+                        erroMsg = 'Instabilidade temporária nos Correios (Tente novamente mais tarde)';
+                    }
+
                     tr.innerHTML =
-                        `<td>${terminal}</td><td>${codigoTrim}</td><td class="text-red-600" colspan="3">Erro: ${erroMsg}</td><td><button class="btn-detalhes" onclick="abrirModal('${codigoTrim}')">JSON</button></td>`;
+                        `<td>${terminal}</td><td>${codigoTrim}</td><td class="text-red-600" colspan="4">Erro: ${erroMsg}</td><td><button class="btn-detalhes" onclick="abrirModal('${codigoTrim}')">JSON</button></td>`;
                     resultados.push({
                         terminal,
                         codigo: codigoTrim,
+                        dias: '-',
                         previsto: '',
                         descricao: `Erro: ${erroMsg}`,
+                        descricaoExportacao: `Erro: ${erroMsg}`,
                         local: '',
+                        agAtrasoDemoraCritico: 'NÃO',
                         status: 'ERRO'
                     });
                     return;
@@ -607,6 +617,20 @@
                     const dateB = new Date((b.dtHrCriado?.date || b.dataHora || 0));
                     return dateB - dateA;
                 });
+
+                let diasEmTransito = '-';
+                if (todosEventos.length > 0) {
+                    const evtMaisNovo = todosEventos[0];
+                    const evtMaisAntigo = todosEventos[todosEventos.length - 1];
+                    const dataMaisNova = new Date(evtMaisNovo.dtHrCriado?.date || evtMaisNovo.dataHora || 0);
+                    const dataMaisAntiga = new Date(evtMaisAntigo.dtHrCriado?.date || evtMaisAntigo.dataHora || 0);
+
+                    if (!isNaN(dataMaisNova.getTime()) && !isNaN(dataMaisAntiga.getTime()) && dataMaisAntiga.getTime() !== 0) {
+                        const diffTime = Math.abs(dataMaisNova - dataMaisAntiga);
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        diasEmTransito = diffDays;
+                    }
+                }
 
                 // Atualiza o objeto para o Modal usar depois
                 data.rastreio = data.rastreio || {};
@@ -676,11 +700,12 @@
 
                 tr.className = rowBgClass;
                 tr.innerHTML =
-                    `<td>${terminal}</td><td>${codigoTrim}${badgeCorreios}${iconAlertaCritico}</td><td><span class="${statusClass} ${isRestritoAereo ? 'text-rose-700 bg-rose-100' : ''}">${isRestritoAereo ? '🚨 ' : ''}${descricao}</span></td><td>${previsao}</td><td>${local}</td><td><button class="btn-detalhes" onclick="abrirModal('${codigoTrim}')">Detalhes</button></td>`;
+                    `<td>${terminal}</td><td>${codigoTrim}${badgeCorreios}${iconAlertaCritico}</td><td><span class="${statusClass} ${isRestritoAereo ? 'text-rose-700 bg-rose-100' : ''}">${isRestritoAereo ? '🚨 ' : ''}${descricao}</span></td><td class="text-center font-bold text-slate-700">${diasEmTransito}</td><td>${previsao}</td><td>${local}</td><td><button class="btn-detalhes" onclick="abrirModal('${codigoTrim}')">Detalhes</button></td>`;
 
                 resultados.push({
                     terminal,
                     codigo: codigoTrim,
+                    dias: diasEmTransito,
                     previsto: previsao,
                     descricao,
                     descricaoExportacao,
@@ -751,6 +776,7 @@
             const dataForExport = resultados.map(r => ({
                 'Terminal': r.terminal,
                 'Código de Postagem': r.codigo,
+                'Dias': r.dias,
                 'Status Principal': r.descricaoExportacao,
                 'Alerta Demora': r.agAtrasoDemoraCritico,
                 'Previsão de Entrega': r.previsto,
