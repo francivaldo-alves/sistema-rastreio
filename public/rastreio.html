@@ -338,8 +338,8 @@
 
             <h2 class="text-lg font-semibold text-slate-800 mb-4">Processar Lista CSV</h2>
 
-            <input id="arquivoCSV" type="file" accept=".csv,.txt" class="input-field mb-3" />
-            <button id="btnImportar" class="btn btn-primary w-full mb-3">Importar e Processar CSV</button>
+            <input id="arquivoCSV" type="file" accept=".csv,.txt,.xlsx,.xls" class="input-field mb-3" />
+            <button id="btnImportar" class="btn btn-primary w-full mb-3">Importar e Processar</button>
             <button id="btnInterromper" class="btn btn-danger w-full" style="display:none;">❌ Interromper
                 Processamento</button>
 
@@ -374,6 +374,7 @@
                                 <th>Descrição</th>
                                 <th>Dias</th>
                                 <th>Previsão de entrega</th>
+                                <th>Data de Entrega</th>
                                 <th>Local</th>
                                 <th>Detalhes</th>
                             </tr>
@@ -422,7 +423,7 @@
         // --- EVENTOS ---
         btnImportar.addEventListener('click', () => {
             const file = fileInput.files[0];
-            if (!file) return alert('Selecione um arquivo CSV (.csv ou .txt) com duas colunas: Terminal e Rastreio.');
+            if (!file) return alert('Selecione um arquivo CSV ou XLSX com duas colunas: Terminal e Rastreio.');
             tabelaBody.innerHTML = '';
             resultados = [];
             readAndProcessFile(file);
@@ -459,7 +460,7 @@
             await processarItem({
                 terminal: 'Manual',
                 codigo: codigo
-            }, 1, 1);
+            }, 0, 1);
 
             isProcessing = false;
             progressContainer.style.display = 'none';
@@ -483,30 +484,56 @@
             isProcessing = true;
 
             try {
-                const text = await file.text();
-                const lines = parseLines(text).map(l => l.trim()).filter(l => l);
-                if (lines.length === 0) {
-                    mensagem.textContent = 'Arquivo vazio.';
-                    mensagem.className = 'msg-error';
-                    isProcessing = false;
-                    return;
-                }
+                let parsed = [];
+                const ext = file.name.split('.').pop().toLowerCase();
 
-                const sample = lines.slice(0, 5).join('\n');
-                const delim = detectDelimiter(sample);
+                if (['xlsx', 'xls'].includes(ext)) {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const wb = XLSX.read(arrayBuffer, { type: 'array' });
+                    const sheet = wb.Sheets[wb.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-                const parsed = [];
-                for (let i = 0; i < lines.length; i++) {
-                    const raw = lines[i].trim();
-                    if (!raw) continue;
-                    const cols = raw.split(delim).map(c => c.replace(/"/g, '').trim());
+                    let startRow = 0;
+                    if (json.length > 0) {
+                        const firstRow = json[0];
+                        if (firstRow && (String(firstRow[0]).toLowerCase().includes('terminal') || String(firstRow[1]).toLowerCase().includes('rastreio'))) {
+                            startRow = 1;
+                        }
+                    }
 
-                    if (i === 0 && (cols[0]?.toLowerCase().includes('terminal') || cols[1]?.toLowerCase().includes('rastreio'))) continue;
+                    for (let i = startRow; i < json.length; i++) {
+                        const row = json[i];
+                        if (!row || row.length === 0) continue;
 
-                    if (cols.length >= 2) parsed.push({
-                        terminal: cols[0],
-                        codigo: cols[1]
-                    });
+                        const terminal = String(row[0] || '').trim();
+                        const codigo = String(row[1] || '').trim();
+
+                        if (codigo) {
+                            parsed.push({ terminal, codigo });
+                        }
+                    }
+                } else {
+                    const text = await file.text();
+                    const lines = parseLines(text).map(l => l.trim()).filter(l => l);
+                    if (lines.length > 0) {
+                        const sample = lines.slice(0, 5).join('\n');
+                        const delim = detectDelimiter(sample);
+
+                        for (let i = 0; i < lines.length; i++) {
+                            const raw = lines[i].trim();
+                            if (!raw) continue;
+                            const cols = raw.split(delim).map(c => c.replace(/"/g, '').trim());
+
+                            if (i === 0 && (cols[0]?.toLowerCase().includes('terminal') || cols[1]?.toLowerCase().includes('rastreio'))) continue;
+
+                            if (cols.length >= 2) parsed.push({
+                                terminal: cols[0],
+                                codigo: cols[1]
+                            });
+                        }
+                    } else {
+                        throw new Error("Arquivo vazio.");
+                    }
                 }
 
                 const lista = parsed.map(p => ({
@@ -515,7 +542,7 @@
                 })).filter(p => p.codigo);
 
                 if (lista.length === 0) {
-                    mensagem.textContent = 'Nenhum código válido encontrado no CSV.';
+                    mensagem.textContent = 'Nenhum código válido encontrado no arquivo.';
                     mensagem.className = 'msg-error';
                     isProcessing = false;
                     return;
@@ -527,15 +554,44 @@
                 progressText.textContent = '0%';
                 btnInterromper.style.display = 'inline-flex';
 
-                for (let i = 0; i < lista.length; i++) {
-                    if (!isProcessing) break;
-                    const item = lista[i];
-                    await processarItem(item, i + 1, lista.length);
+                // Pré-criar as linhas da tabela
+                lista.forEach((item, index) => {
+                    const tr = document.createElement('tr');
+                    tr.id = `row-${index}`;
+                    tr.innerHTML = `<td>${item.terminal}</td><td>${item.codigo}</td><td colspan="5" class="text-slate-400">Aguardando...</td><td></td>`;
+                    tabelaBody.appendChild(tr);
+                });
 
-                    const percent = Math.round(((i + 1) / lista.length) * 100);
+                const MAX_CONCURRENT = 15;
+                let currentIndex = 0;
+                let processedCount = 0;
+
+                const processNext = async () => {
+                    if (!isProcessing || currentIndex >= lista.length) return;
+
+                    const itemIndex = currentIndex++;
+                    const item = lista[itemIndex];
+
+                    try {
+                        await processarItem(item, itemIndex, lista.length);
+                    } catch (e) {
+                        console.error("Erro no processarItem", e);
+                    }
+
+                    processedCount++;
+                    const percent = Math.round((processedCount / lista.length) * 100);
                     progresso.style.width = `${percent}%`;
-                    progressText.textContent = `${percent}% (${i + 1}/${lista.length})`;
+                    progressText.textContent = `${percent}% (${processedCount}/${lista.length})`;
+
+                    await processNext();
+                };
+
+                const workers = [];
+                for (let i = 0; i < MAX_CONCURRENT && i < lista.length; i++) {
+                    workers.push(processNext());
                 }
+
+                await Promise.all(workers);
 
                 progressContainer.style.display = 'none';
                 btnInterromper.style.display = 'none';
@@ -545,7 +601,7 @@
                 }
                 isProcessing = false;
             } catch (e) {
-                console.error("Erro ao ler CSV:", e);
+                console.error("Erro ao ler arquivo:", e);
                 mensagem.textContent = `Erro ao ler o arquivo: ${e.message}`;
                 mensagem.className = 'msg-error';
                 isProcessing = false;
@@ -557,9 +613,13 @@
         async function processarItem(item, index, total) {
             const { terminal, codigo } = item;
             const codigoTrim = codigo.trim();
-            const tr = document.createElement('tr');
-            tabelaBody.appendChild(tr);
-            tr.innerHTML = `<td>${terminal}</td><td>${codigoTrim}</td><td colspan="4" class="text-sky-500">Processando... (${index}/${total})</td><td></td>`;
+
+            let tr = document.getElementById(`row-${index}`);
+            if (!tr) {
+                tr = document.createElement('tr');
+                tabelaBody.appendChild(tr);
+            }
+            tr.innerHTML = `<td>${terminal}</td><td>${codigoTrim}</td><td colspan="5" class="text-sky-500">Processando... (${index + 1}/${total})</td><td></td>`;
 
             try {
                 const resp = await fetch(`${API_BASE_URL}/rastreio/${encodeURIComponent(codigoTrim)}`);
@@ -576,11 +636,12 @@
                     }
 
                     tr.innerHTML =
-                        `<td>${terminal}</td><td>${codigoTrim}</td><td class="text-red-600" colspan="4">Erro: ${erroMsg}</td><td><button class="btn-detalhes" onclick="abrirModal('${codigoTrim}')">JSON</button></td>`;
+                        `<td>${terminal}</td><td>${codigoTrim}</td><td class="text-red-600" colspan="5">Erro: ${erroMsg}</td><td><button class="btn-detalhes" onclick="abrirModal('${codigoTrim}')">JSON</button></td>`;
                     resultados.push({
                         terminal,
                         codigo: codigoTrim,
                         dias: '-',
+                        dataEntrega: '-',
                         previsto: '',
                         descricao: `Erro: ${erroMsg}`,
                         descricaoExportacao: `Erro: ${erroMsg}`,
@@ -639,6 +700,19 @@
                 const evt = todosEventos.length > 0 ? todosEventos[0] : null;
                 const previsao = rPrincipal.dtPrevista || '';
                 let descricao = evt ? evt.descricao : (rPrincipal.status || 'Sem status');
+
+                let dataEntrega = '-';
+                const evtEntregue = todosEventos.find(e => e.descricao && e.descricao.toLowerCase().includes('entregue'));
+                if (evtEntregue) {
+                    let dh = evtEntregue.dtHrCriado?.date || evtEntregue.dataHora || evtEntregue.data || '';
+                    if (dh) {
+                        dataEntrega = dh.split('T')[0].split(' ')[0];
+                        if (dataEntrega.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                            const parts = dataEntrega.split('-');
+                            dataEntrega = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                        }
+                    }
+                }
 
                 // Array de palavras-chave para identificar problemas no histórico
                 const kwsProblema = ['restrito', 'limitação', 'não efetuada', 'atras', 'roubo', 'extravio', 'apreendid', 'fiscaliza', 'ausente', 'incorreto', 'recusado'];
@@ -700,12 +774,13 @@
 
                 tr.className = rowBgClass;
                 tr.innerHTML =
-                    `<td>${terminal}</td><td>${codigoTrim}${badgeCorreios}${iconAlertaCritico}</td><td><span class="${statusClass} ${isRestritoAereo ? 'text-rose-700 bg-rose-100' : ''}">${isRestritoAereo ? '🚨 ' : ''}${descricao}</span></td><td class="text-center font-bold text-slate-700">${diasEmTransito}</td><td>${previsao}</td><td>${local}</td><td><button class="btn-detalhes" onclick="abrirModal('${codigoTrim}')">Detalhes</button></td>`;
+                    `<td>${terminal}</td><td>${codigoTrim}${badgeCorreios}${iconAlertaCritico}</td><td><span class="${statusClass} ${isRestritoAereo ? 'text-rose-700 bg-rose-100' : ''}">${isRestritoAereo ? '🚨 ' : ''}${descricao}</span></td><td class="text-center font-bold text-slate-700">${diasEmTransito}</td><td>${previsao}</td><td class="text-center font-medium">${dataEntrega}</td><td>${local}</td><td><button class="btn-detalhes" onclick="abrirModal('${codigoTrim}')">Detalhes</button></td>`;
 
                 resultados.push({
                     terminal,
                     codigo: codigoTrim,
                     dias: diasEmTransito,
+                    dataEntrega: dataEntrega,
                     previsto: previsao,
                     descricao,
                     descricaoExportacao,
@@ -777,9 +852,10 @@
                 'Terminal': r.terminal,
                 'Código de Postagem': r.codigo,
                 'Dias': r.dias,
+                'Previsão de Entrega': r.previsto,
+                'Data de Entrega': r.dataEntrega,
                 'Status Principal': r.descricaoExportacao,
                 'Alerta Demora': r.agAtrasoDemoraCritico,
-                'Previsão de Entrega': r.previsto,
                 'Local': r.local
             }));
 
